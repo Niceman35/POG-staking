@@ -1,0 +1,15 @@
+{
+  "name": "nuxt-with-vuikit",
+  "dependencies": {
+    "ethers": "latest",
+    "@walletconnect/web3-provider": "latest",
+    "nuxt": "latest"
+  },
+  "scripts": {
+    "dev": "nuxt",
+    "build": "nuxt build",
+    "start": "nuxt start",
+    "generate": "nuxt generate",
+    "post-update": "yarn upgrade --latest"
+  }
+}
