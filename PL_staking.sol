@@ -7,8 +7,8 @@ contract POGLPStaking is Ownable {
 
     uint32 public FeePeriod = 7 days;
     uint32 public ClaimFee = 200; // 2%
+    uint32 public minAmount = 500;
     address public TREASURY;
-    uint256 public minAmount = 500 ether;
     IERC20 public immutable LPToken;
 
     struct Stake {
@@ -21,7 +21,7 @@ contract POGLPStaking is Ownable {
     event Staked(address indexed user, uint256 amount);
     event Claimed(address indexed user, uint256 amount, uint256 fee);
     event FeeSet(uint256 period, uint256 fee);
-    event MinAmountSet(uint256 newMinAmount);
+    event MinAmountSet(uint32 newMinAmount);
 
     constructor(address _owner, IERC20 _lpToken, address _treasury) {
         transferOwnership(_owner);
@@ -34,7 +34,7 @@ contract POGLPStaking is Ownable {
         uint224 amount = uint224(_amount);
         require(amount > 0, "POGLPStake: wrong amount");
         uint224 newAmount = userStake.amount + amount;
-        require(newAmount >= minAmount, "POGLPStake: cannot stake less than min");
+        require(newAmount >= uint224(minAmount) * 1 ether, "POGLPStake: cannot stake less than min");
 
         userStake.amount = newAmount;
         userStake.stakeTime = uint32(block.timestamp);
@@ -77,9 +77,9 @@ contract POGLPStaking is Ownable {
         TREASURY = _treasury;
     }
 
-    function setMinAmount(uint _newMinAmount) external onlyOwner {
+    function setMinAmount(uint32 _newMinAmount) external onlyOwner {
         require(_newMinAmount > 0, "POGLPStake: min amount cannot be 0");
-        minAmount = uint224(_newMinAmount);
+        minAmount = _newMinAmount;
         emit MinAmountSet(minAmount);
     }
 
