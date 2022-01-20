@@ -98,7 +98,7 @@ contract POGLPStaking is Ownable {
             amount -= TotalStaked;
         }
         require(amount > 0, "POGLPStake: Zero amount");
-        _token.transfer(TREASURY, _token.balanceOf(address(this)));
+        _token.transfer(TREASURY, amount);
     }
 }
 
