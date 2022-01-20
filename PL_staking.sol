@@ -10,6 +10,7 @@ contract POGLPStaking is Ownable {
     uint32 public minAmount = 500;
     address public TREASURY;
     IERC20 public immutable LPToken;
+    uint256 public TotalStaked;
 
     struct Stake {
         uint224 amount;
@@ -38,6 +39,7 @@ contract POGLPStaking is Ownable {
 
         userStake.amount = newAmount;
         userStake.stakeTime = uint32(block.timestamp);
+        TotalStaked += amount;
         LPToken.transferFrom(_msgSender(), address(this), amount);
         emit Staked(_msgSender(), amount);
     }
@@ -48,6 +50,7 @@ contract POGLPStaking is Ownable {
         require(amount > 0, "POGLPStake: wrong amount");
         require(amount <= userStake.amount, "POGLPStake: balance not enough");
         userStake.amount -= amount;
+        TotalStaked -= amount;
         uint224 fee;
         if(block.timestamp < userStake.stakeTime + FeePeriod) {
             fee = amount * ClaimFee / 10000;
@@ -90,7 +93,11 @@ contract POGLPStaking is Ownable {
     }
 
     function recoverERC20(IERC20 _token) external onlyOwner {
-        require(_token != LPToken, "POGLPStake: Can not withdraw LP tokens");
+        uint amount = _token.balanceOf(address(this));
+        if(_token == LPToken) {
+            amount -= TotalStaked;
+        }
+        require(amount > 0, "POGLPStake: Zero amount");
         _token.transfer(TREASURY, _token.balanceOf(address(this)));
     }
 }
