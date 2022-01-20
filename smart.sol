@@ -8,14 +8,11 @@ contract POGBox is Ownable {
     using EnumerableSet for EnumerableSet.UintSet;
 
     uint32 private constant MAX_LOCK_PERIOD = 365 days;
-    uint32 public FeePeriod = 24 hours; 
+    uint32 public FeePeriod = 24 hours;
     uint32 public ClaimFee = 200; // 2%
     address public TREASURY;
     IERC20 public immutable POGToken;
     IERC1155 public immutable POGNFT;
-
-//    address[] internal stakeholders;
-//    mapping(address => uint256) private _balances;
 
     struct Stake {
         uint192 item;
@@ -35,7 +32,6 @@ contract POGBox is Ownable {
         uint80 openPrice;
     }
     Item[] internal allItems;
-//    mapping(uint => Item) items;
 
     event Staked(address indexed user, uint indexed item, uint amount, uint payment, uint indexed stakeId);
     event Claimed(address indexed user, uint indexed item, uint amount, uint payment, uint indexed stakeId);
@@ -67,7 +63,7 @@ contract POGBox is Ownable {
         for (uint i; i < _stakes.length; i++) {
             require(allUsers[_msgSender()].contains(_stakes[i]), "POGBox: stake not found");
             require(allStakes[_stakes[i]].stakeTime > 0, "POGBox: invalid stake id");
-            _claim(_stakes[i], _msgSender());
+            require(_claim(_stakes[i], _msgSender()), "POGBox: error in claim");
         }
     }
 
@@ -84,7 +80,7 @@ contract POGBox is Ownable {
         }
         uint boxesNum;
         if(_item.active) {
-           if(block.timestamp > _stake.stakeTime + _item.lockPeriod) {
+            if(block.timestamp > _stake.stakeTime + _item.lockPeriod) {
                 boxesNum = ((block.timestamp - _stake.stakeTime) / _item.lockPeriod) * _stake.amount;
                 require(boxesNum > 0, "calc error");
                 POGNFT.mint(user, _item.nftID, boxesNum, "");
@@ -130,7 +126,7 @@ contract POGBox is Ownable {
         return stakes;
     }
 
-//     Admin functions
+    //     Admin functions
 
     function addItem(uint _nftId, uint _lockPeriod, uint _stakePrice, uint _openPrice) external onlyOwner {
         require(_lockPeriod > 0 && _lockPeriod <= MAX_LOCK_PERIOD, "POGBox: invalid lock period");
@@ -167,13 +163,14 @@ contract POGBox is Ownable {
     }
 
 
-// emergency balance recover functions
+    // emergency balance recover functions
 
     function recoverBNB() external onlyOwner {
         payable(TREASURY).transfer(address(this).balance);
     }
 
     function recoverERC20(IERC20 _token) external onlyOwner {
+        require(_token != POGToken, "POGLPStake: Can not withdraw LP tokens");
         _token.transfer(TREASURY, _token.balanceOf(address(this)));
     }
 
