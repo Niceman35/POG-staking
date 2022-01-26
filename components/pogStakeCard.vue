@@ -13,11 +13,12 @@
                     New box {{ stake.newBoxIn }}<br/>
                     <span v-if="stake.Fee">No Fee {{ stake.noFeeLeft }}</span><br/>
                 </p>
-                <button @click="$nuxt.$emit('claim-stakes', [stake.stakeId])" :disabled="stake.amountPOG===0">Claim <b v-if="stake.Fee">with fee</b>: {{stake.amountPOG}} POG and {{stake.extraItems}} box{{getPlural(stake.extraItems)}}</button><br/>
+                <button @click="$nuxt.$emit('claim-boxes', [stake.stakeId])" :disabled="stake.extraItems===0">Claim {{stake.extraItems}} box{{getPlural(stake.extraItems)}}</button><br/>
+                <button @click="$nuxt.$emit('claim-stakes', [stake.stakeId])" :disabled="stake.amountPOG===0">Withdraw <b v-if="stake.Fee">with fee</b>: {{stake.amountPOG}} POG and {{stake.extraItems}} box{{getPlural(stake.extraItems)}}</button><br/>
                 <hr/>
             </div>
             </div>
-            <button v-if="unlockTokens[0] > 0" @click="$nuxt.$emit('claim-stakes', getClaimableIds())">Claim ALL: {{unlockTokens[0]}} POG and {{unlockTokens[1]}} box{{getPlural(unlockTokens[1])}}</button><br/>
+            <button v-if="unlockTokens[0] > 0" @click="$nuxt.$emit('claim-stakes', getClaimableIds())">Withdraw ALL: {{unlockTokens[0]}} POG and {{unlockTokens[1]}} box{{getPlural(unlockTokens[1])}}</button><br/>
         </div>
         <br/>
         <div class="with-button">
@@ -38,7 +39,8 @@ export default {
     props:  ['caseName', 'pogBalance', 'cardData', 'approved'],
     data() {
         return {
-            casesToStake: 1
+            casesToStake: 1,
+            timeNow: Math.floor(+new Date()/1000),
         };
     },
     methods: {
@@ -106,23 +108,23 @@ export default {
             console.log('myStakes');
             const feeInfo = this.$nuxt.boxesData.FeeInfo;
             const stakeTime = this.$nuxt.boxesData[this.caseName].stakeTime;
-            const timeNow = Math.floor(+new Date()/1000);
+//            const timeNow = Math.floor(+new Date()/1000);
             let stakes = this.cardData.stakes;
             if(Array.isArray(stakes)) {
                 for(let i=0; i < stakes.length; i++) {
                     stakes[i].amountPOG = 0;
                     const stake = stakes[i];
-                    let noFeeTimeLeft = (stake.stakeTime + feeInfo.feePeriod) - timeNow;
-                    let firstBoxTimeLeft = (stake.stakeTime + stakeTime) - timeNow;
+                    let noFeeTimeLeft = (stake.stakeTime + feeInfo.feePeriod) - this.timeNow;
+                    let firstBoxTimeLeft = (stake.stakeTime + stakeTime) - this.timeNow;
 
                     let boxesForTime = 0;
                     if(firstBoxTimeLeft <= 0) {
-                        boxesForTime = Math.floor((timeNow - stake.stakeTime) / stakeTime);
+                        boxesForTime = Math.floor((this.timeNow - stake.stakeTime) / stakeTime);
                     }
-                    let newBoxTimeLeft = (stake.stakeTime + stakeTime + stakeTime*boxesForTime) - timeNow;
+                    let newBoxTimeLeft = (stake.stakeTime + stakeTime + stakeTime*boxesForTime) - this.timeNow;
                     stakes[i].newBoxIn = this.getRelativeTime(newBoxTimeLeft);
 
-                    stakes[i].extraItems = boxesForTime * stake.amount;
+                    stakes[i].extraItems = boxesForTime * stake.amount - stakes[i].claimed;
                     if(noFeeTimeLeft <= 0) {
                         stakes[i].Fee = false;
                         stakes[i].amountPOG = this.getCost(stake.amount);
@@ -151,7 +153,7 @@ export default {
             }
             return unlock;
         }
-    }
+    },
 }
 </script>
 

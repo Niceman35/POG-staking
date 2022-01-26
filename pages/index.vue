@@ -131,9 +131,22 @@ export default {
             }
         },
         async claimPog(stakeIDs) {
-            console.log('StakeBox');
+            console.log('WithdrawPOG');
             console.log(stakeIDs);
             let status = await this.$Web3.claimPOG(stakeIDs);
+            if(status) {
+                alert('Claimed successful.');
+                await this.getBalance();
+                await this.getBoxes();
+                await this.getStakes();
+            } else {
+                alert('Error: Transaction not confirmed.');
+            }
+        },
+        async claimNFT(stakeIDs) {
+            console.log('Claim Box');
+            console.log(stakeIDs);
+            let status = await this.$Web3.claimNFT(stakeIDs);
             if(status) {
                 alert('Claimed successful.');
                 await this.getBalance();
@@ -221,6 +234,9 @@ export default {
         });
         this.$nuxt.$on('claim-stakes', (params) => {
             this.claimPog(params);
+        });
+        this.$nuxt.$on('claim-boxes', (params) => {
+            this.claimNFT(params);
         });
         this.$nuxt.boxesData = {
             'Bronze' : {id: "0", name: "Bronze", price: 250, stakeTime: 1209600, nftID: '5'},

@@ -10,12 +10,13 @@ EthersPlugin.install = function (Vue, options) {
     let signer = null;
     let blockchain = {};
 
-    const StakeAddress = "0x2c93cE767fF08A2Ebe501A4b4E80eC70292474B5";
+    const StakeAddress = "0x26b7ACe209f721822B211620cBEfDce23D0eDc69";
     const StakeAbi = [
         "function stake(uint _item, uint _amount) public",
+        "function withdraw(uint[] _stakes) public",
         "function claim(uint[] _stakes) public",
         "function getStakeIds(address) public view returns (uint[])",
-        "function getStakes(address) public view returns (tuple(uint192, uint32, uint32)[])",
+        "function getStakes(address) public view returns (tuple(uint184, uint16, uint24, uint32)[])",
     ];
 
     const POGAddress = "0x8985420180ACD9320B3808D688240DA23c43f39e";
@@ -158,7 +159,8 @@ EthersPlugin.install = function (Vue, options) {
                 staked[stake[0]].push({
                     'stakeId': stakeIDs[i].toString(),
                     'amount': stake[1],
-                    'stakeTime': stake[2],
+                    'claimed': stake[2],
+                    'stakeTime': stake[3],
                     'extraItems': 0
                 });
             }
@@ -183,6 +185,21 @@ EthersPlugin.install = function (Vue, options) {
     };
 
     blockchain.claimPOG = async function(itemIDs) {
+        console.log('Claim', itemIDs);
+        const POGContract = new ethers.Contract(StakeAddress, StakeAbi, provider);
+        const POGContractSigner = POGContract.connect(signer);
+        try {
+            const tx = await POGContractSigner.withdraw(itemIDs);
+            const receipt = await tx.wait();
+            console.log(receipt);
+            return receipt.status === 1;
+        } catch (e) {
+            console.error(e);
+            return false;
+        }
+    };
+
+    blockchain.claimNFT = async function(itemIDs) {
         console.log('Claim', itemIDs);
         const POGContract = new ethers.Contract(StakeAddress, StakeAbi, provider);
         const POGContractSigner = POGContract.connect(signer);
