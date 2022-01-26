@@ -16,8 +16,9 @@ contract POGBox is Ownable {
     uint256 public TotalStaked;
 
     struct Stake {
-        uint192 item;
-        uint32 amount;
+        uint184 item;
+        uint16 amount;
+        uint24 claimed;
         uint32 stakeTime;
     }
     uint internal lastStakeID;
@@ -56,20 +57,36 @@ contract POGBox is Ownable {
         TotalStaked += payment;
 
         uint stakeId = lastStakeID++;
-        allStakes[stakeId] = Stake(uint192(_item), uint32(_amount), uint32(block.timestamp));
+        allStakes[stakeId] = Stake(uint184(_item), uint16(_amount), uint24(0), uint32(block.timestamp));
         allUsers[_msgSender()].add(stakeId);
         emit Staked(_msgSender(), _item, _amount, payment, stakeId);
+    }
+
+    function withdraw(uint[] calldata _stakes) public {
+        for (uint i; i < _stakes.length; i++) {
+            require(allUsers[_msgSender()].contains(_stakes[i]), "POGBox: stake not found");
+            require(allStakes[_stakes[i]].stakeTime > 0, "POGBox: invalid stake id");
+            require(_withdraw(_stakes[i], _msgSender()), "POGBox: error in withdraw");
+        }
     }
 
     function claim(uint[] calldata _stakes) public {
         for (uint i; i < _stakes.length; i++) {
             require(allUsers[_msgSender()].contains(_stakes[i]), "POGBox: stake not found");
             require(allStakes[_stakes[i]].stakeTime > 0, "POGBox: invalid stake id");
-            require(_claim(_stakes[i], _msgSender()), "POGBox: error in claim");
+            Stake storage _stake = allStakes[_stakes[i]];
+            Item storage _item = allItems[_stake.item];
+            if(_item.active) {
+                uint boxesNum = _getBoxesNum(_stake, _item.lockPeriod);
+                if(boxesNum > 0) {
+                    _stake.claimed += uint16(boxesNum);
+                    POGNFT.mint(_msgSender(), _item.nftID, boxesNum, "");
+                }
+            }
         }
     }
 
-    function _claim(uint stakeId, address user) internal returns(bool) {
+    function _withdraw(uint stakeId, address user) internal returns(bool) {
         Stake storage _stake = allStakes[stakeId];
         Item storage _item = allItems[_stake.item];
         uint payment = _item.stakePrice * _stake.amount;
@@ -83,9 +100,9 @@ contract POGBox is Ownable {
         }
         uint boxesNum;
         if(_item.active) {
-            if(block.timestamp > _stake.stakeTime + _item.lockPeriod) {
-                boxesNum = ((block.timestamp - _stake.stakeTime) / _item.lockPeriod) * _stake.amount;
-                require(boxesNum > 0, "calc error");
+            boxesNum = _getBoxesNum(_stake, _item.lockPeriod);
+            if(boxesNum > 0) {
+                _stake.claimed += uint16(boxesNum);
                 POGNFT.mint(user, _item.nftID, boxesNum, "");
             }
         }
@@ -96,8 +113,19 @@ contract POGBox is Ownable {
             emit Claimed(user, _stake.item, boxesNum, payment, stakeId);
             return true;
         } else {
-            revert("can not remove stake");
+            return false;
         }
+    }
+
+    function _getBoxesNum(Stake storage _stake, uint32 lockPeriod) internal view returns(uint256) {
+        if(block.timestamp > _stake.stakeTime + lockPeriod) {
+            uint256 boxesNum;
+            boxesNum = ((block.timestamp - _stake.stakeTime) / lockPeriod) * _stake.amount;
+            boxesNum -= _stake.claimed;
+            require(boxesNum > 0, "calc error");
+            return boxesNum;
+        }
+        return 0;
     }
 
     function open(uint _item, uint _amount, address _to) external {
