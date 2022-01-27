@@ -35,6 +35,8 @@ contract POGBox is Ownable {
     }
     Item[] internal allItems;
 
+
+
     event Staked(address indexed user, uint indexed item, uint amount, uint payment, uint indexed stakeId);
     event Claimed(address indexed user, uint indexed item, uint amount, uint payment, uint indexed stakeId);
     event Open(address indexed user, address receiver, uint item, uint amount, uint payment);
@@ -181,6 +183,8 @@ contract POGBox is Ownable {
         require(item.lockPeriod > 0, "POGBox: invalid item");
         return item;
     }
+
+    /// Initialize boxes finction (4 boxes  5-4-2-3)
 
     function setTreasury(address _treasury) external onlyOwner {
         require(_treasury != address(0), "POGBox: wrong address");
