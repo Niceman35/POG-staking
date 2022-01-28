@@ -73,6 +73,9 @@ contract ItemStaking is Ownable {
     event DeactivateItem(
         uint256 item
     );
+    event ActivateItem(
+        uint256 item
+    );
 
     constructor(address owner) {
         transferOwnership(owner);
@@ -271,6 +274,12 @@ contract ItemStaking is Ownable {
         require(allItems[_item].active, "item is not active");
         allItems[_item].active = false;
         emit DeactivateItem(_item);
+    }
+
+    function activateItem(uint256 _item) external onlyOwner {
+        require(!allItems[_item].active, "item is active");
+        allItems[_item].active = true;
+        emit ActivateItem(_item);
     }
 
     function setTreasury(address _treasury) external onlyOwner {
