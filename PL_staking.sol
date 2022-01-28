@@ -3,102 +3,99 @@ pragma solidity 0.8.11;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract POGLPStaking is Ownable {
-
+contract IslandStaking is Ownable {
     uint32 public FeePeriod = 7 days;
-    uint32 public ClaimFee = 200; // 2%
-    uint32 public minAmount = 500;
-    address public TREASURY;
-    IERC20 public immutable LPToken;
+    uint32 public ClaimFee = 2; // 2%
+    uint32 public MinAmount = 500; // min 500 lp/POG tokens
+    address public Treasury; // set in constructor
     uint256 public TotalStaked;
+    IERC20 public immutable Token;  // set in constructor
 
-    struct Stake {
+    struct StakeStruct {
         uint224 amount;
         uint32 stakeTime;
     }
 
-    mapping(address => Stake) internal AllStakes;
+    mapping(address => StakeStruct) internal AllStakes;
 
-    event Staked(address indexed user, uint256 amount);
-    event Claimed(address indexed user, uint256 amount, uint256 fee);
-    event FeeSet(uint256 period, uint256 fee);
-    event MinAmountSet(uint32 newMinAmount);
+    event Stake(address indexed user, uint256 amount);
+    event Claim(address indexed user, uint256 amount, uint256 fee);
+    event SetFee(uint256 period, uint256 fee);
+    event SetMinAmount(uint32 newMinAmount);
 
-    constructor(address _owner, IERC20 _lpToken, address _treasury) {
+    constructor(address _owner) {
         transferOwnership(_owner);
-        LPToken = _lpToken;
-        TREASURY = _treasury;
+        Token = IERC20(0x56830e12976DfDfFcd3c6Ac29Ac4E603377A5002); //Set token address here
+        Treasury = payable(0xc711A44078E11c5bB5c0ce12caA9c212C9c65BD2);
     }
 
     function stake(uint256 _amount) public {
-        Stake storage userStake = AllStakes[_msgSender()];
+        StakeStruct storage userStake = AllStakes[_msgSender()];
         uint224 amount = uint224(_amount);
-        require(amount > 0, "POGLPStake: wrong amount");
-        uint224 newAmount = userStake.amount + amount;
-        require(newAmount >= uint224(minAmount) * 1 ether, "POGLPStake: cannot stake less than min");
-
-        userStake.amount = newAmount;
+        require(amount > 0, "wrong amount");
+        userStake.amount += amount;
+        require(userStake.amount >= uint224(MinAmount) * 1 ether, "cannot stake less than min");
         userStake.stakeTime = uint32(block.timestamp);
         TotalStaked += amount;
-        LPToken.transferFrom(_msgSender(), address(this), amount);
-        emit Staked(_msgSender(), amount);
+        Token.transferFrom(_msgSender(), address(this), amount);
+        emit Stake(_msgSender(), amount);
     }
 
     function claim(uint256 _amount) public {
-        Stake storage userStake = AllStakes[_msgSender()];
+        StakeStruct storage userStake = AllStakes[_msgSender()];
         uint224 amount = uint224(_amount);
-        require(amount > 0, "POGLPStake: wrong amount");
-        require(amount <= userStake.amount, "POGLPStake: balance not enough");
+        require(amount > 0, "wrong amount");
+        require(amount <= userStake.amount, "balance not enough");
         userStake.amount -= amount;
         TotalStaked -= amount;
         uint224 fee;
         if(block.timestamp < userStake.stakeTime + FeePeriod) {
-            fee = amount * ClaimFee / 10000;
+            fee = amount * ClaimFee / 100;
             amount = amount - fee;
             require(fee > 0 && amount > fee, "calc error");
-            LPToken.transfer(TREASURY, fee);
+            Token.transfer(Treasury, fee);
         }
-        LPToken.transfer(_msgSender(), amount);
-        emit Claimed(_msgSender(), amount, fee);
+        Token.transfer(_msgSender(), amount);
+        emit Claim(_msgSender(), amount, fee);
     }
 
-    function getStake(address _user) external view returns(Stake memory) {
+    function getStake(address _user) external view returns(StakeStruct memory) {
         return AllStakes[_user];
     }
 
-    //     Admin functions
+    //  Admin functions
 
     function setFee(uint32 _claimFee, uint32 _feePeriod) external onlyOwner {
-        require(_claimFee > 0 && _feePeriod > 0, "POGBox: wrong data");
+        require(_claimFee > 0 && _feePeriod > 0, "wrong data");
         FeePeriod = _feePeriod;
         ClaimFee = _claimFee;
-        emit FeeSet(_feePeriod, _claimFee);
+        emit SetFee(_feePeriod, _claimFee);
     }
 
     function setTreasury(address _treasury) external onlyOwner {
-        require(_treasury != address(0), "POGBox: wrong address");
-        TREASURY = _treasury;
+        require(_treasury != address(0), "wrong address");
+        Treasury = _treasury;
     }
 
     function setMinAmount(uint32 _newMinAmount) external onlyOwner {
-        require(_newMinAmount > 0, "POGLPStake: min amount cannot be 0");
-        minAmount = _newMinAmount;
-        emit MinAmountSet(minAmount);
+        require(_newMinAmount > 0, "min amount cannot be 0");
+        MinAmount = _newMinAmount;
+        emit SetMinAmount(MinAmount);
     }
 
     // emergency balance recover functions
 
     function recoverBNB() external onlyOwner {
-        payable(TREASURY).transfer(address(this).balance);
+        payable(Treasury).transfer(address(this).balance);
     }
 
     function recoverERC20(IERC20 _token) external onlyOwner {
         uint amount = _token.balanceOf(address(this));
-        if(_token == LPToken) {
+        if(_token == Token) {
             amount -= TotalStaked;
         }
-        require(amount > 0, "POGLPStake: Zero amount");
-        _token.transfer(TREASURY, amount);
+        require(amount > 0, "zero amount");
+        _token.transfer(Treasury, amount);
     }
 }
 

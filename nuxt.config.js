@@ -14,7 +14,7 @@ export default {
   components: true,
   css: [],
   plugins: ['plugins/ethers.js'],
-  // router: {
-  //   base: '/projects/Cripto-Wallet/dist/'
-  // }
+ router: {
+   base: '/projects/POG/dist/'
+ }
 }

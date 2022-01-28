@@ -54,8 +54,8 @@ export default {
         getClaimableIds() {
             let stakeIDs = [];
             if(Array.isArray(this.myStakes)) {
-                for(let i =0; i < this.stakes.length; i++) {
-                    const stake = this.stakes[i];
+                for(let i =0; i < this.myStakes.length; i++) {
+                    const stake = this.myStakes[i];
                     if(stake.amountPOG > 0) {
                         stakeIDs.push(stake.stakeId)
                     }
@@ -108,7 +108,6 @@ export default {
             console.log('myStakes');
             const feeInfo = this.$nuxt.boxesData.FeeInfo;
             const stakeTime = this.$nuxt.boxesData[this.caseName].stakeTime;
-//            const timeNow = Math.floor(+new Date()/1000);
             let stakes = this.cardData.stakes;
             if(Array.isArray(stakes)) {
                 for(let i=0; i < stakes.length; i++) {
@@ -154,6 +153,17 @@ export default {
             return unlock;
         }
     },
+    watch: {
+        timeNow: {
+            handler(value) {
+                setTimeout(() => {
+                    this.timeNow = Math.floor(+new Date()/1000);
+                }, 10000);
+            },
+            immediate: true
+        }
+
+    }
 }
 </script>
 

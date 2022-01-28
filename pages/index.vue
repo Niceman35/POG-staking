@@ -92,6 +92,11 @@ export default {
             console.log('getStakes');
             if(this.myWallet > '') {
                 this.$Web3.getStakes(this.myWallet).then(stakes => {
+                    this.pogData.bronze.stakes = {};
+                    this.pogData.silver.stakes = {};
+                    this.pogData.gold.stakes = {};
+                    this.pogData.platinum.stakes = {};
+
                     const stakeNums = {
                         '0': 'bronze',
                         '1': 'silver',

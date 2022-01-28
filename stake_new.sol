@@ -1,228 +1,355 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.8.10;
+pragma solidity 0.8.11;
 
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract POGBox is Ownable {
+contract ItemStaking is Ownable {
     using EnumerableSet for EnumerableSet.UintSet;
 
-    uint32 private constant MAX_LOCK_PERIOD = 365 days;
     uint32 public FeePeriod = 24 hours;
-    uint32 public ClaimFee = 200; // 2%
-    address public TREASURY;
-    IERC20 public immutable POGToken;
-    IERC1155 public immutable POGNFT;
-    uint256 public TotalStaked;
+    uint32 public ClaimFee = 2; // 2%
+    address public Treasure; // set in constructor
+    IERC20 public immutable POGToken; // set in constructor
+    IERC1155 public immutable POGNFT; // set in constructor
+    uint128 public TotalStaked;
+    uint128 internal lastStakeID;
+    ItemStruct[] internal allItems;
 
-    struct Stake {
+    mapping(uint256 => StakeStruct) private allStakes; // StakeStruct database
+    mapping(address => EnumerableSet.UintSet) private allUsers; // StakeStruct database indexes linked to user
+
+    struct StakeStruct {
         uint184 item;
         uint16 amount;
         uint24 claimed;
         uint32 stakeTime;
     }
-    uint internal lastStakeID;
-    mapping(uint => Stake) private allStakes;
-
-    mapping(address => EnumerableSet.UintSet) private allUsers;
-
-    struct Item {
+    struct ItemStruct {
         bool active;
         uint32 nftID;
         uint32 lockPeriod;
         uint80 stakePrice;
         uint80 openPrice;
     }
-    Item[] internal allItems;
 
-    event Staked(address indexed user, uint indexed item, uint amount, uint payment, uint indexed stakeId);
-    event Claimed(address indexed user, uint indexed item, uint amount, uint payment, uint indexed stakeId);
-    event Open(address indexed user, address receiver, uint item, uint amount, uint payment);
-    event AddItem(uint item, uint lockPeriod, uint stakePrice, uint openPrice);
-    event DeactivateItem(uint item);
+    // Events list
 
-    constructor(address _owner, address _treasury, IERC20 _pog, IERC1155 _pognft) {
-        transferOwnership(_owner);
-        TREASURY = _treasury;
-        POGToken = _pog;
-        POGNFT = _pognft;
+    event Stake(
+        address indexed user,
+        uint256 indexed item,
+        uint256 amount,
+        uint256 payment,
+        uint256 indexed stakeId
+    );
+    event Claim(
+        address indexed user,
+        uint256 indexed item,
+        uint256 nftID,
+        uint256 count,
+        uint256 indexed stakeId
+    );
+    event Withdraw(
+        address indexed user,
+        uint256 indexed item,
+        uint256 payment,
+        uint256 fee,
+        uint256 indexed stakeId
+    );
+    event Open(
+        address indexed user,
+        address receiver,
+        uint256 indexed item,
+        uint256 indexed nftID,
+        uint256 count,
+        uint256 payment
+    );
+    event CreateItem(
+        uint256 item,
+        uint256 lockPeriod,
+        uint256 stakePrice,
+        uint256 openPrice
+    );
+    event DeactivateItem(
+        uint256 item
+    );
+
+    constructor(address owner) {
+        transferOwnership(owner);
+        POGToken = IERC20(0xFCb0f2D2f83a32A847D8ABb183B724C214CD7dD8);
+        POGNFT = IERC1155(0xC1c8F100c9Eff87c7C1e99a266b670FE4486dd17);
+        Treasure = payable(0xc711A44078E11c5bB5c0ce12caA9c212C9c65BD2);
+        allItems.push(ItemStruct(true, 5, 14 days, 250 ether, 2.5 ether));
+        allItems.push(ItemStruct(true, 4, 14 days, 500 ether, 5 ether));
+        allItems.push(ItemStruct(true, 2, 14 days, 1000 ether, 10 ether));
+        allItems.push(ItemStruct(true, 3, 14 days, 1500 ether, 15 ether));
     }
 
-    function stake(uint _item, uint _amount) public {
-        Item memory item = allItems[_item];
-        require(item.active, "POGBox: inactive item");
-        require(_amount > 0 && _amount < 1000, "POGBox: max 1000 boxes");
-        uint payment = item.stakePrice * _amount;
+    function stake(uint16 _item, uint16 _amount) public {
+        ItemStruct memory item = allItems[_item];
+        require(item.active, "inactive item");
+        require(_amount > 0 && _amount < 1000, "max 1000 boxes");
+        uint128 payment = item.stakePrice * _amount;
         POGToken.transferFrom(_msgSender(), address(this), payment);
         TotalStaked += payment;
 
-        uint stakeId = lastStakeID++;
-        allStakes[stakeId] = Stake(uint184(_item), uint16(_amount), uint24(0), uint32(block.timestamp));
+        uint256 stakeId = lastStakeID++;
+        allStakes[stakeId] = StakeStruct(
+            uint184(_item),
+            uint16(_amount),
+            uint24(0),
+            uint32(block.timestamp)
+        );
         allUsers[_msgSender()].add(stakeId);
-        emit Staked(_msgSender(), _item, _amount, payment, stakeId);
+        emit Stake(_msgSender(), _item, _amount, payment, stakeId);
     }
 
-    function withdraw(uint[] calldata _stakes) public {
-        for (uint i; i < _stakes.length; i++) {
-            require(allUsers[_msgSender()].contains(_stakes[i]), "POGBox: stake not found");
-            require(allStakes[_stakes[i]].stakeTime > 0, "POGBox: invalid stake id");
-            require(_withdraw(_stakes[i], _msgSender()), "POGBox: error in withdraw");
+    // withdraw all: box + token
+
+    function withdraw(uint256[] calldata _stakes) public {
+        for (uint256 i; i < _stakes.length; i++) {
+            require(
+                allUsers[_msgSender()].contains(_stakes[i]),
+                "stake not found"
+            );
+            require(
+                allStakes[_stakes[i]].stakeTime > 0,
+                "invalid stake id"
+            );
+            require(
+                _withdraw(_stakes[i], _msgSender()),
+                "error in withdraw"
+            );
         }
     }
 
-    function claim(uint[] calldata _stakes) public {
-        for (uint i; i < _stakes.length; i++) {
-            require(allUsers[_msgSender()].contains(_stakes[i]), "POGBox: stake not found");
-            require(allStakes[_stakes[i]].stakeTime > 0, "POGBox: invalid stake id");
-            Stake storage _stake = allStakes[_stakes[i]];
-            Item storage _item = allItems[_stake.item];
-            if(_item.active) {
-                uint boxesNum = _getBoxesNum(_stake, _item.lockPeriod);
-                if(boxesNum > 0) {
+    // withdraw: box only
+
+    function claim(uint256[] calldata _stakes) public {
+        for (uint256 i; i < _stakes.length; i++) {
+            require(
+                allUsers[_msgSender()].contains(_stakes[i]),
+                "stake not found"
+            );
+            require(
+                allStakes[_stakes[i]].stakeTime > 0,
+                "invalid stake id"
+            );
+            StakeStruct storage _stake = allStakes[_stakes[i]];
+            ItemStruct storage _item = allItems[_stake.item];
+            if (_item.active) {
+                uint256 boxesNum = _getAvailableBoxes(_stake, _item.lockPeriod);
+                if (boxesNum > 0) {
                     _stake.claimed += uint16(boxesNum);
                     POGNFT.mint(_msgSender(), _item.nftID, boxesNum, "");
+                    emit Claim(_msgSender(), _stake.item, _item.nftID, boxesNum, stakeId);
                 }
             }
         }
     }
 
-    function _withdraw(uint stakeId, address user) internal returns(bool) {
-        Stake storage _stake = allStakes[stakeId];
-        Item storage _item = allItems[_stake.item];
-        uint payment = _item.stakePrice * _stake.amount;
-        TotalStaked -= payment;
-        uint fee;
-        if(block.timestamp < _stake.stakeTime + FeePeriod) {
-            fee = payment * ClaimFee / 10000;
+    // helpers for withdraw
+
+    function _withdraw(uint256 stakeId, address user) internal returns (bool) {
+        StakeStruct storage _stake = allStakes[stakeId];
+        ItemStruct storage _item = allItems[_stake.item];
+        uint128 payment = _item.stakePrice * _stake.amount;
+        uint128 fee;
+        if (block.timestamp < _stake.stakeTime + FeePeriod) {
+            fee = (payment * ClaimFee) / 100;
             payment = payment - fee;
             require(fee > 0 && payment > fee, "calc error");
-            POGToken.transfer(TREASURY, fee);
+            POGToken.transfer(Treasure, fee);
         }
-        uint boxesNum;
-        if(_item.active) {
-            boxesNum = _getBoxesNum(_stake, _item.lockPeriod);
-            if(boxesNum > 0) {
+        uint256 boxesNum;
+        if (_item.active) {
+            boxesNum = _getAvailableBoxes(_stake, _item.lockPeriod);
+            if (boxesNum > 0) {
                 _stake.claimed += uint16(boxesNum);
                 POGNFT.mint(user, _item.nftID, boxesNum, "");
+                emit Claim(user, _stake.item, _item.nftID, boxesNum, stakeId);
             }
         }
-        POGToken.transfer(user, payment);
 
-        if(allUsers[_msgSender()].remove(stakeId)) {
+        TotalStaked -= payment;
+        POGToken.transfer(user, payment);
+        emit Withdraw(user, _stake.item, payment, fee, stakeId);
+
+        if (allUsers[_msgSender()].remove(stakeId)) {
             delete allStakes[stakeId];
-            emit Claimed(user, _stake.item, boxesNum, payment, stakeId);
             return true;
         } else {
             return false;
         }
     }
 
-    function _getBoxesNum(Stake storage _stake, uint32 lockPeriod) internal view returns(uint256) {
-        if(block.timestamp > _stake.stakeTime + lockPeriod) {
-            uint256 boxesNum;
-            boxesNum = ((block.timestamp - _stake.stakeTime) / lockPeriod) * _stake.amount;
+    // helper: get nft count to claim
+
+    function _getAvailableBoxes(StakeStruct storage _stake, uint32 lockPeriod)
+    internal
+    view
+    returns (uint256)
+    {
+        uint256 boxesNum;
+        if (block.timestamp > _stake.stakeTime + lockPeriod) {
+            boxesNum = ((block.timestamp - _stake.stakeTime) / lockPeriod) *  _stake.amount;
             boxesNum -= _stake.claimed;
             require(boxesNum > 0, "calc error");
-            return boxesNum;
         }
-        return 0;
+        return boxesNum;
     }
 
-    function open(uint _item, uint _amount, address _to) external {
-        require(allItems[_item].lockPeriod > 0, "POGBox: invalid item");
-        require(_to != address(0), "POGBox: wrong address provided");
-        require(_open(_msgSender(), _to, _item, _amount, allItems[_item].openPrice), "POGBox: open box error");
+    function open(
+        uint256 _item,
+        uint256 _count,
+        address _to
+    ) external {
+        require(allItems[_item].openPrice > 0, "invalid item");
+        require(_count > 0, "amount should be positive");
+        require(_to != address(0), "wrong address provided");
+        uint256 payment = _count * allItems[_item].openPrice;
+        POGToken.transferFrom(_msgSender(), Treasure, payment);
+        POGNFT.burn(_msgSender(), allItems[_item].nftID, _count);
+        emit Open(_msgSender(), _to, _item, allItems[_item].nftID, _count, payment);
     }
 
-    function _open(address _from, address _to, uint _item, uint _amount, uint _price) internal returns(bool) {
-        uint payment = _amount * _price;
-        if (payment > 0) {
-            POGToken.transferFrom(_from, TREASURY, payment);
-        }
-        POGNFT.burn(_from, allItems[_item].nftID, _amount);
-        emit Open(_from, _to, allItems[_item].nftID, _amount, payment);
-        return true;
-    }
+    /*
+    return IDs of staked boxes
+    @returns {Array} => [0,1,2,3]
+    */
 
-    function getStakeIds(address _user) public view returns(uint[] memory) {
+    function getStakeIds(address _user) public view returns (uint256[] memory) {
         return allUsers[_user].values();
     }
 
-    function getStakes(address _user) external view returns(Stake[] memory) {
-        uint[] memory stakeIds = getStakeIds(_user);
-        Stake[] memory stakes = new Stake[](stakeIds.length);
-        for (uint i; i < stakeIds.length; i++) {
+    /*
+    returns active box stakes
+    @returns [Array] => [Stake { uint184 item; uint16 amount; uint24 claimed; uint32 stakeTime; }]
+    */
+
+    function getStakes(address _user) public view returns (StakeStruct[] memory) {
+        uint256[] memory stakeIds = getStakeIds(_user);
+        StakeStruct[] memory stakes = new StakeStruct[](stakeIds.length);
+        for (uint256 i; i < stakeIds.length; i++) {
             stakes[i] = allStakes[stakeIds[i]];
         }
         return stakes;
     }
 
-    //     Admin functions
-
-    function addItem(uint _nftId, uint _lockPeriod, uint _stakePrice, uint _openPrice) external onlyOwner {
-        require(_lockPeriod > 0 && _lockPeriod <= MAX_LOCK_PERIOD, "POGBox: invalid lock period");
-        require(_stakePrice > 0, "POGBox: invalid stake price");
-        allItems.push(Item(true, uint32(_nftId), uint32(_lockPeriod), uint80(_stakePrice), uint80(_openPrice)));
-        emit AddItem(allItems.length, _lockPeriod, _stakePrice, _openPrice);
+    function getItems() public view returns (ItemStruct[] memory) {
+        return allItems;
     }
 
-    function deactivateItem(uint _item) external onlyOwner {
-        require(allItems[_item].active, "POGBox: item is not active");
+    function getItem(uint256 _item) public view returns (ItemStruct memory) {
+        ItemStruct memory item = allItems[_item];
+        require(item.lockPeriod > 0, "invalid item");
+        return item;
+    }
+
+    //     Admin functions
+
+    function createItem(
+        uint256 _nftId,
+        uint256 _lockPeriod,
+        uint256 _stakePrice,
+        uint256 _openPrice
+    ) external onlyOwner {
+        require(_lockPeriod > 0 && _stakePrice > 0, "invalid input data");
+        allItems.push(
+            ItemStruct(
+                true,
+                uint32(_nftId),
+                uint32(_lockPeriod),
+                uint80(_stakePrice),
+                uint80(_openPrice)
+            )
+        );
+        emit CreateItem((allItems.length - 1), _lockPeriod, _stakePrice, _openPrice);
+    }
+
+    function deactivateItem(uint256 _item) external onlyOwner {
+        require(allItems[_item].active, "item is not active");
         allItems[_item].active = false;
         emit DeactivateItem(_item);
     }
 
-    function getItems() external view returns(Item[] memory) {
-        return allItems;
-    }
-
-    function getItem(uint _item) external view returns(Item memory) {
-        Item memory item = allItems[_item];
-        require(item.lockPeriod > 0, "POGBox: invalid item");
-        return item;
-    }
-
     function setTreasury(address _treasury) external onlyOwner {
-        require(_treasury != address(0), "POGBox: wrong address");
-        TREASURY = _treasury;
+        require(_treasury != address(0), "wrong address");
+        Treasure = _treasury;
     }
 
     function setFee(uint32 _claimFee, uint32 _feePeriod) external onlyOwner {
-        require(_claimFee > 0 && _feePeriod > 0, "POGBox: wrong data");
+        require(_claimFee > 0 && _feePeriod > 0, "wrong data");
         FeePeriod = _feePeriod;
         ClaimFee = _claimFee;
     }
 
-
     // emergency balance recover functions
 
     function recoverBNB() external onlyOwner {
-        payable(TREASURY).transfer(address(this).balance);
+        payable(Treasure).transfer(address(this).balance);
     }
 
     function recoverERC20(IERC20 _token) external onlyOwner {
-        uint amount = _token.balanceOf(address(this));
-        if(_token == POGToken) {
+        uint256 amount = _token.balanceOf(address(this));
+
+        // Not allows to withdraw staked POGs (only not staked properly POGs will be withdrawn)
+        if (_token == POGToken) {
             amount -= TotalStaked;
         }
-        require(amount > 0, "POGBox: Zero amount");
-        _token.transfer(TREASURY, amount);
+        require(amount > 0, "Zero amount");
+        _token.transfer(Treasure, amount);
     }
 
-    function recoverERC1155(IERC1155 _token, uint _item) external onlyOwner {
-        _token.safeTransferFrom(address(this), TREASURY, _item, _token.balanceOf(address(this), _item), "");
+    function recoverERC1155(IERC1155 _token, uint256 _item) external onlyOwner {
+        _token.safeTransferFrom(
+            address(this),
+            Treasure,
+            _item,
+            _token.balanceOf(address(this), _item),
+            ""
+        );
     }
 }
 
 interface IERC1155 {
-    function balanceOf(address account, uint256 id) external view returns (uint256);
-    function mint(address to, uint256 id, uint256 amount, bytes memory data) external;
-    function burn(address from, uint256 id, uint256 value) external;
-    function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes calldata data) external;
+    function balanceOf(address account, uint256 id)
+    external
+    view
+    returns (uint256);
+
+    function mint(
+        address to,
+        uint256 id,
+        uint256 amount,
+        bytes memory data
+    ) external;
+
+    function burn(
+        address from,
+        uint256 id,
+        uint256 value
+    ) external;
+
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 id,
+        uint256 amount,
+        bytes calldata data
+    ) external;
 }
 
 interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+
+    function transfer(address recipient, uint256 amount)
+    external
+    returns (bool);
+
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
 }
