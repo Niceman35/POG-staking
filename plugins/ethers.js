@@ -10,7 +10,7 @@ EthersPlugin.install = function (Vue, options) {
     let signer = null;
     let blockchain = {};
 
-    const StakeAddress = "0xC240680cCdB710362C582B797cb7AFa0B00911b9";
+    const StakeAddress = "0x9283572D9518C77E62d56039A582FF0e6f9E6C95";
     const StakeAbi = [
         "function stake(uint16 _item, uint16 _amount) public",
         "function withdraw(uint256[] _stakes) public",

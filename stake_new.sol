@@ -79,8 +79,10 @@ contract ItemStaking is Ownable {
 
     constructor(address owner) {
         transferOwnership(owner);
-        POGToken = IERC20(0xFCb0f2D2f83a32A847D8ABb183B724C214CD7dD8);
-        POGNFT = IERC1155(0xC1c8F100c9Eff87c7C1e99a266b670FE4486dd17);
+        //        POGToken = IERC20(0xFCb0f2D2f83a32A847D8ABb183B724C214CD7dD8);
+        POGToken = IERC20(0x8985420180ACD9320B3808D688240DA23c43f39e); // TestNet
+        //        POGNFT = IERC1155(0xC1c8F100c9Eff87c7C1e99a266b670FE4486dd17);
+        POGNFT = IERC1155(0xeD275A14023dC979f15fe9493eadfB8045747415); // TestNet
         Treasure = payable(0xc711A44078E11c5bB5c0ce12caA9c212C9c65BD2);
         allItems.push(ItemStruct(true, 5, 14 days, 250 ether, 2.5 ether));
         allItems.push(ItemStruct(true, 4, 14 days, 500 ether, 5 ether));
@@ -89,7 +91,7 @@ contract ItemStaking is Ownable {
     }
 
     function stake(uint16 _item, uint16 _amount) public {
-        ItemStruct memory item = allItems[_item];
+        ItemStruct storage item = allItems[_item];
         require(item.active, "inactive item");
         require(_amount > 0 && _amount < 1000, "max 1000 boxes");
         uint128 payment = item.stakePrice * _amount;
@@ -109,7 +111,7 @@ contract ItemStaking is Ownable {
 
     // withdraw all: box + token
 
-    function withdraw(uint256[] calldata _stakes) public {
+    function withdraw(uint256[] calldata _stakes) external {
         for (uint256 i; i < _stakes.length; i++) {
             require(
                 allUsers[_msgSender()].contains(_stakes[i]),
@@ -119,16 +121,19 @@ contract ItemStaking is Ownable {
                 allStakes[_stakes[i]].stakeTime > 0,
                 "invalid stake id"
             );
+            _claimBox(_stakes[i], _msgSender());
+            _withdrawPOG(_stakes[i], _msgSender());
             require(
-                _withdraw(_stakes[i], _msgSender()),
+                allUsers[_msgSender()].remove(_stakes[i]),
                 "error in withdraw"
             );
+            delete allStakes[_stakes[i]];
         }
     }
 
     // withdraw: box only
 
-    function claim(uint256[] calldata _stakes) public {
+    function claim(uint256[] calldata _stakes) external {
         for (uint256 i; i < _stakes.length; i++) {
             require(
                 allUsers[_msgSender()].contains(_stakes[i]),
@@ -136,70 +141,10 @@ contract ItemStaking is Ownable {
             );
             require(
                 allStakes[_stakes[i]].stakeTime > 0,
-                "invalid stake id"
+                "invalid stake"
             );
-            StakeStruct storage _stake = allStakes[_stakes[i]];
-            ItemStruct storage _item = allItems[_stake.item];
-            if (_item.active) {
-                uint256 boxesNum = _getAvailableBoxes(_stake, _item.lockPeriod);
-                if (boxesNum > 0) {
-                    _stake.claimed += uint16(boxesNum);
-                    POGNFT.mint(_msgSender(), _item.nftID, boxesNum, "");
-                    emit Claim(_msgSender(), _stake.item, _item.nftID, boxesNum, stakeId);
-                }
-            }
+            _claimBox(_stakes[i], _msgSender());
         }
-    }
-
-    // helpers for withdraw
-
-    function _withdraw(uint256 stakeId, address user) internal returns (bool) {
-        StakeStruct storage _stake = allStakes[stakeId];
-        ItemStruct storage _item = allItems[_stake.item];
-        uint128 payment = _item.stakePrice * _stake.amount;
-        uint128 fee;
-        if (block.timestamp < _stake.stakeTime + FeePeriod) {
-            fee = (payment * ClaimFee) / 100;
-            payment = payment - fee;
-            require(fee > 0 && payment > fee, "calc error");
-            POGToken.transfer(Treasure, fee);
-        }
-        uint256 boxesNum;
-        if (_item.active) {
-            boxesNum = _getAvailableBoxes(_stake, _item.lockPeriod);
-            if (boxesNum > 0) {
-                _stake.claimed += uint16(boxesNum);
-                POGNFT.mint(user, _item.nftID, boxesNum, "");
-                emit Claim(user, _stake.item, _item.nftID, boxesNum, stakeId);
-            }
-        }
-
-        TotalStaked -= payment;
-        POGToken.transfer(user, payment);
-        emit Withdraw(user, _stake.item, payment, fee, stakeId);
-
-        if (allUsers[_msgSender()].remove(stakeId)) {
-            delete allStakes[stakeId];
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    // helper: get nft count to claim
-
-    function _getAvailableBoxes(StakeStruct storage _stake, uint32 lockPeriod)
-    internal
-    view
-    returns (uint256)
-    {
-        uint256 boxesNum;
-        if (block.timestamp > _stake.stakeTime + lockPeriod) {
-            boxesNum = ((block.timestamp - _stake.stakeTime) / lockPeriod) *  _stake.amount;
-            boxesNum -= _stake.claimed;
-            require(boxesNum > 0, "calc error");
-        }
-        return boxesNum;
     }
 
     function open(
@@ -214,6 +159,38 @@ contract ItemStaking is Ownable {
         POGToken.transferFrom(_msgSender(), Treasure, payment);
         POGNFT.burn(_msgSender(), allItems[_item].nftID, _count);
         emit Open(_msgSender(), _to, _item, allItems[_item].nftID, _count, payment);
+    }
+
+    // helper for withdraw
+
+    function _withdrawPOG(uint256 stakeId, address user) internal {
+        StakeStruct storage _stake = allStakes[stakeId];
+        ItemStruct storage _item = allItems[_stake.item];
+        uint128 payment = _item.stakePrice * _stake.amount;
+        uint128 fee;
+        if (block.timestamp < _stake.stakeTime + FeePeriod) {
+            fee = payment * ClaimFee / 100;
+            payment -= fee;
+            POGToken.transfer(Treasure, fee);
+        }
+        TotalStaked -= payment;
+        POGToken.transfer(user, payment);
+        emit Withdraw(user, _stake.item, payment, fee, stakeId);
+    }
+
+    // helper for claim box
+
+    function _claimBox(uint256 stakeId, address user) internal {
+        StakeStruct storage _stake = allStakes[stakeId];
+        ItemStruct storage _item = allItems[_stake.item];
+        if (_item.active && block.timestamp > _stake.stakeTime + _item.lockPeriod) {
+            uint256 boxesNum;
+            boxesNum = ((block.timestamp - _stake.stakeTime) / _item.lockPeriod) *  _stake.amount;
+            boxesNum -= _stake.claimed;
+            _stake.claimed += uint16(boxesNum);
+            POGNFT.mint(user, _item.nftID, boxesNum, "");
+            emit Claim(user, _stake.item, _item.nftID, boxesNum, stakeId);
+        }
     }
 
     /*

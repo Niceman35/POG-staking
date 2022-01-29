@@ -101,12 +101,12 @@ export default {
             //     'Platinum': '3',
             //     'Test': '4'
             // };
-            return this.$nuxt.boxesData[this.caseName].id;
+            return this.$nuxt.boxesData[this.caseName].id.toString();
 //            return ids[this.caseName];
         },
         myStakes() {
             console.log('myStakes');
-            const feeInfo = this.$nuxt.boxesData.FeeInfo;
+            const feeInfo = this.$nuxt.FeeInfo;
             const stakeTime = this.$nuxt.boxesData[this.caseName].stakeTime;
             let stakes = this.cardData.stakes;
             if(Array.isArray(stakes)) {

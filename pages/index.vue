@@ -13,25 +13,9 @@
           </div>
           <div>My POG balance: <b>{{ pogData.pogBalance }}</b></div>
           <div class="casesCards">
-              <pog-stake-card case-name="Bronze"
+              <pog-stake-card v-for="boxData in $nuxt.boxesData" :case-name="boxData.name"
                               :pog-balance="pogData.pogBalance"
-                              :card-data="pogData.bronze"
-                              :approved="pogData.approvedCoin"></pog-stake-card>
-              <pog-stake-card case-name="Silver"
-                              :pog-balance="pogData.pogBalance"
-                              :card-data="pogData.silver"
-                              :approved="pogData.approvedCoin"></pog-stake-card>
-              <pog-stake-card case-name="Gold"
-                              :pog-balance="pogData.pogBalance"
-                              :card-data="pogData.gold"
-                              :approved="pogData.approvedCoin"></pog-stake-card>
-              <pog-stake-card case-name="Platinum"
-                              :pog-balance="pogData.pogBalance"
-                              :card-data="pogData.platinum"
-                              :approved="pogData.approvedCoin"></pog-stake-card>
-              <pog-stake-card case-name="Test"
-                              :pog-balance="pogData.pogBalance"
-                              :card-data="pogData.test"
+                              :card-data="pogData[boxData.name.toLowerCase()]"
                               :approved="pogData.approvedCoin"></pog-stake-card>
           </div>
       </div>
@@ -72,11 +56,10 @@ export default {
             console.log('Load NFT balances');
             if(this.myWallet > '') {
                 this.$Web3.NFTBalance(this.myWallet).then(balance => {
-                    this.pogData.bronze.balance = balance[0].toString();
-                    this.pogData.silver.balance = balance[1].toString();
-                    this.pogData.gold.balance = balance[2].toString();
-                    this.pogData.platinum.balance = balance[3].toString();
-                    this.pogData.test.balance = balance[4].toString();
+                    for (const stakeName in this.$nuxt.boxesData) {
+                        const stakeInfo = this.$nuxt.boxesData[stakeName]
+                        this.pogData[stakeInfo.name.toLowerCase()].balance = balance[stakeInfo.id].toString();
+                    }
                 });
             }
         },
@@ -92,20 +75,9 @@ export default {
             console.log('getStakes');
             if(this.myWallet > '') {
                 this.$Web3.getStakes(this.myWallet).then(stakes => {
-                    this.pogData.bronze.stakes = {};
-                    this.pogData.silver.stakes = {};
-                    this.pogData.gold.stakes = {};
-                    this.pogData.platinum.stakes = {};
-
-                    const stakeNums = {
-                        '0': 'bronze',
-                        '1': 'silver',
-                        '2': 'gold',
-                        '3': 'platinum',
-                        '4': 'test'
-                    }
-                    for (const stakeNum in stakes) {
-                        this.pogData[stakeNums[stakeNum]].stakes = stakes[stakeNum];
+                    for (const stakeName in this.$nuxt.boxesData) {
+                        const stakeInfo = this.$nuxt.boxesData[stakeName]
+                        this.pogData[stakeInfo.name.toLowerCase()].stakes = stakes[stakeInfo.id] || [];
                     }
                 })
             }
@@ -244,13 +216,13 @@ export default {
             this.claimNFT(params);
         });
         this.$nuxt.boxesData = {
-            'Bronze' : {id: "0", name: "Bronze", price: 250, stakeTime: 1209600, nftID: '5'},
-            'Silver' : {id: "1", name: "Silver", price: 500, stakeTime: 1209600, nftID: '4'},
-            'Gold' : {id: "2", name: "Gold", price: 1000, stakeTime: 1209600, nftID: '2'},
-            'Platinum' : {id: "3", name: "Platinum", price: 1500, stakeTime: 1209600, nftID: '3'},
-            'Test' : {id: "4", name: "Test", price: 1500, stakeTime: 300, nftID: '1'},
-            'FeeInfo' : {feeMult: 0.98, feePeriod: 86400}
+            'Bronze' : {id: 0, name: "Bronze", price: 250, stakeTime: 1209600, nftID: '5'},
+            'Silver' : {id: 1, name: "Silver", price: 500, stakeTime: 1209600, nftID: '4'},
+            'Gold' : {id: 2, name: "Gold", price: 1000, stakeTime: 1209600, nftID: '2'},
+            'Platinum' : {id: 3, name: "Platinum", price: 1500, stakeTime: 1209600, nftID: '3'},
+            'Test' : {id: 4, name: "Test", price: 1500, stakeTime: 300, nftID: '1'},
         }
+        this.$nuxt.FeeInfo = {feeMult: 0.98, feePeriod: 86400}
 
     },
     beforeDestroy(){
