@@ -4,7 +4,7 @@
             <div class="header">{{ caseName }} NFT Box</div>
             <div>Price: {{casePrice}} POG</div><br/>
             <div><b>Boxes in wallet: {{cardData.balance}}</b></div>
-            <div><span v-for="num in parseInt(cardData.balance)" style="width: 30px; height: 30px;" :key="num">🎁</span> </div><br/>
+            <div class="boxesList"><span v-for="num in parseInt(cardData.balance)" style="width: 30px; height: 30px;" :key="num">🎁</span> </div><br/>
             <div>Your current stakes:</div>
             <hr/>
             <div class="stakes-list">
@@ -182,7 +182,10 @@ export default {
 .CaseCard button {
     padding:7px;
 }
-
+.CaseCard .boxesList {
+    max-height: 150px;
+    overflow: auto;
+}
 .CaseCard .with-button {
     text-align: center;
 }
